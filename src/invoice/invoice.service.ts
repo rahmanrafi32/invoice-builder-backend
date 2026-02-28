@@ -5,7 +5,7 @@ import { Invoice } from './entities/invoice.entities';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import dayjs from 'dayjs';
-import { chromium } from 'playwright';
+import puppeteer from 'puppeteer';
 
 @Injectable()
 export class InvoiceService {
@@ -46,29 +46,31 @@ export class InvoiceService {
   }
 
   private async generateAndUploadPdf(invoice: Invoice): Promise<string> {
-    const browser = await chromium.launch({
+    const browser = await puppeteer.launch({
+      headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
 
     const page = await browser.newPage();
 
-    await page.setViewportSize({ width: 794, height: 1123 });
+    // 👇 Set exact A4 viewport so CSS renders at correct dimensions
+    await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1 });
 
     await page.setContent(this.generateHtml(invoice), {
-      waitUntil: 'networkidle', // playwright uses 'networkidle' not 'networkidle0'
+      waitUntil: 'networkidle0',
     });
 
     const pdfBuffer = await page.pdf({
-      width: '794px',
-      height: '1123px',
-      printBackground: true, // renders background colors
+      width: '794px', // 👈 fixed px — NOT 'A4'
+      height: '1123px', // 👈 fixed px — NOT 'A4'
+      printBackground: true, // 👈 THIS is why colors were missing
       margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' },
     });
 
     await browser.close();
 
     const monthName = dayjs(invoice.month).format('MMMM');
-    const fileName = `Invoice_${monthName}`;
+    const fileName = `Invoice_${monthName}_${Date.now()}`;
 
     return await this.cloudinaryService.uploadPdfBuffer(
       Buffer.from(pdfBuffer),
@@ -125,7 +127,9 @@ export class InvoiceService {
             }
 
             .sender-address {
-              background: #f5e642;
+              background: #f5e642 !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
               padding: 3px 6px;
               font-size: 12px;
               display: inline-block;
@@ -158,7 +162,9 @@ export class InvoiceService {
             }
 
             .meta-value {
-              background: #f5e642;
+              background: #f5e642 !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
               padding: 2px 10px;
               font-size: 12px;
               font-weight: 600;
@@ -200,7 +206,9 @@ export class InvoiceService {
             }
 
             .invoice-table thead tr {
-              background: #4a6f8a;
+              background: #4a6f8a !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
               color: #fff;
             }
 
@@ -216,8 +224,17 @@ export class InvoiceService {
               text-align: right;
             }
 
-            .invoice-table tbody tr:nth-child(odd)  { background: #eaf0f6; }
-            .invoice-table tbody tr:nth-child(even) { background: #ffffff; }
+            .invoice-table tbody tr:nth-child(odd) {
+              background: #ffffff !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+
+            .invoice-table tbody tr:nth-child(even) {
+              background: #dce8f0 !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
 
             .invoice-table tbody td {
               padding: 0 10px;

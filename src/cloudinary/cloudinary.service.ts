@@ -28,18 +28,27 @@ export class CloudinaryService {
               new Error('Upload failed: no response from Cloudinary'),
             );
 
-          const downloadUrl = cloudinary.url(result.public_id, {
-            resource_type: 'raw',
-            flags: 'attachment',
-            sign_url: true,
-            secure: true,
-          });
-
-          resolve(downloadUrl);
+          resolve(result.public_id);
         },
       );
 
       uploadStream.end(buffer);
     });
+  }
+
+  async deleteFile(publicId: string): Promise<void> {
+    try {
+      const result = await cloudinary.uploader.destroy(publicId, {
+        resource_type: 'raw',
+      });
+
+      if (result.result !== 'ok') {
+        throw new Error(
+          `Failed to delete file: ${result.result || 'Unknown error'}`,
+        );
+      }
+    } catch (error) {
+      throw new Error(`Failed to delete file: ${error.message}`);
+    }
   }
 }

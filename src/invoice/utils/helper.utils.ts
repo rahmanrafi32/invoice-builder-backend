@@ -1,418 +1,488 @@
 import dayjs from 'dayjs';
-import puppeteer from 'puppeteer';
 import { Invoice } from '../entities/invoice.entities';
 import { CloudinaryService } from '../../cloudinary/cloudinary.service';
 import { v2 as cloudinary } from 'cloudinary';
+import PdfPrinter from 'pdfmake/src/printer';
+
+let fonts: {
+  Roboto?: {
+    normal?: Buffer;
+    bold?: Buffer;
+    italics?: Buffer;
+    bolditalics?: Buffer;
+  };
+} = {};
+
+function initializeFonts() {
+  if (Object.keys(fonts).length > 0) {
+    return;
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfMakeFonts = require('pdfmake/build/vfs_fonts');
+    const vfsFonts = pdfMakeFonts.vfs || pdfMakeFonts;
+
+    const fontData: {
+      normal?: Buffer;
+      bold?: Buffer;
+      italics?: Buffer;
+      bolditalics?: Buffer;
+    } = {
+      normal: undefined,
+      bold: undefined,
+      italics: undefined,
+      bolditalics: undefined,
+    };
+
+    // Safe font loading with validation
+    try {
+      if (vfsFonts['Roboto-Regular.ttf']) {
+        fontData.normal = Buffer.from(
+          vfsFonts['Roboto-Regular.ttf'] as string,
+          'base64',
+        );
+      }
+    } catch (error) {
+      console.warn('Failed to load Roboto-Regular.ttf:', error);
+    }
+
+    try {
+      if (vfsFonts['Roboto-Medium.ttf']) {
+        fontData.bold = Buffer.from(
+          vfsFonts['Roboto-Medium.ttf'] as string,
+          'base64',
+        );
+      }
+    } catch (error) {
+      console.warn('Failed to load Roboto-Medium.ttf:', error);
+    }
+
+    try {
+      if (vfsFonts['Roboto-Italic.ttf']) {
+        fontData.italics = Buffer.from(
+          vfsFonts['Roboto-Italic.ttf'] as string,
+          'base64',
+        );
+      }
+    } catch (error) {
+      console.warn('Failed to load Roboto-Italic.ttf:', error);
+    }
+
+    try {
+      if (vfsFonts['Roboto-MediumItalic.ttf']) {
+        fontData.bolditalics = Buffer.from(
+          vfsFonts['Roboto-MediumItalic.ttf'] as string,
+          'base64',
+        );
+      }
+    } catch (error) {
+      console.warn('Failed to load Roboto-MediumItalic.ttf:', error);
+    }
+
+    fonts = {
+      Roboto: fontData,
+    };
+  } catch (error) {
+    console.error('Error initializing pdfmake fonts:', error);
+    fonts = { Roboto: {} };
+  }
+}
 
 /**
- * Generates HTML content for the invoice
+ * Generates invoice PDF document definition for pdfmake
  */
-export function generateInvoiceHtml(invoice: Invoice): string {
+export function generateInvoicePdfDefinition(invoice: Invoice) {
   const formattedDate = dayjs(invoice.issueDate).format('DD/MM/YYYY');
   const monthName = dayjs(invoice.month).format('MMMM YYYY');
   const amount = Number(invoice.amount).toFixed(2);
 
-  const emptyRows = Array.from(
-    { length: 19 },
-    () => `<tr><td></td><td></td><td></td><td></td></tr>`,
-  ).join('');
+  const emptyRows = Array.from({ length: 10 }, (_, idx) => {
+    const bg = idx % 2 === 0 ? '#e6eef5' : '#ffffff';
+    return [
+      { text: '', margin: [0, 5, 0, 5], fillColor: bg },
+      { text: '', margin: [0, 5, 0, 5], fillColor: bg },
+      { text: '', margin: [0, 5, 0, 5], fillColor: bg },
+      { text: '', margin: [0, 5, 0, 5], fillColor: bg },
+    ];
+  });
 
-  return `
-      <!DOCTYPE html>
-      <html lang="en">
-        <head>
-          <meta charset="UTF-8"/>
-          <meta name="viewport" content="width=794"/>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
+  return {
+    pageSize: 'A4',
+    pageMargins: [40, 40, 40, 30],
 
-            html, body {
-              width: 794px;
-              height: 1123px;
-            }
+    content: [
+      // ================= HEADER =================
+      {
+        stack: [
+          // ROW 1 → Invoice title
+          {
+            columns: [
+              { width: '*', text: '' },
+              {
+                width: 'auto',
+                text: 'Invoice',
+                fontSize: 34,
+                italics: true,
+                color: '#8fa3ad',
+                alignment: 'right',
+              },
+            ],
+          },
 
-            body {
-              font-family: Arial, sans-serif;
-              font-size: 12px;
-              color: #1a1a2e;
-              background: #fff;
-              padding: 48px 56px;
-              display: flex;
-              flex-direction: column;
-            }
+          // ROW 2 → Sender + Date/Invoice
+          {
+            columns: [
+              // LEFT (Sender)
+              {
+                width: '*',
+                stack: [
+                  {
+                    text: 'Minhazur Rahman Rafi',
+                    fontSize: 16,
+                    bold: true,
+                    margin: [0, 8, 0, 4],
+                  },
 
-            /* ── HEADER ── */
-            .header {
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-start;
-              margin-bottom: 22px;
-            }
+                  {
+                    table: {
+                      body: [
+                        [
+                          {
+                            text: '183/56 Kazi Villa, 12 no Road, Bagbari, Sylhet, Bangladesh.',
+                            margin: [8, 5, 8, 5],
+                            fontSize: 10,
+                            bold: true,
+                            color: '#333',
+                          },
+                        ],
+                      ],
+                    },
+                    layout: {
+                      fillColor: () => '#fff9cc',
+                      hLineColor: () => '#f0e6a6',
+                      vLineColor: () => '#f0e6a6',
+                      hLineWidth: () => 0.5,
+                      vLineWidth: () => 0.5,
+                    },
+                  },
+                ],
+              },
 
-            .sender-name {
-              font-size: 19px;
-              font-weight: bold;
-              margin-bottom: 5px;
-            }
+              // RIGHT (Date + Invoice)
+              {
+                width: 'auto',
+                table: {
+                  widths: ['auto', 'auto'],
+                  body: [
+                    [
+                      {
+                        text: 'Date:',
+                        bold: true,
+                        color: '#5f7f95',
+                        margin: [0, 2, 6, 2],
+                      },
+                      {
+                        table: {
+                          body: [
+                            [
+                              {
+                                text: formattedDate,
+                                bold: true,
+                                margin: [8, 4, 8, 4],
+                                color: '#333',
+                              },
+                            ],
+                          ],
+                        },
+                        layout: {
+                          fillColor: () => '#fff9cc',
+                          hLineColor: () => '#f0e6a6',
+                          vLineColor: () => '#f0e6a6',
+                          hLineWidth: () => 0.5,
+                          vLineWidth: () => 0.5,
+                        },
+                      },
+                    ],
+                    [
+                      {
+                        text: 'Invoice #:',
+                        bold: true,
+                        color: '#5f7f95',
+                        margin: [0, 2, 6, 2],
+                      },
+                      {
+                        table: {
+                          body: [
+                            [
+                              {
+                                text: invoice.invoiceNumber.toString(),
+                                bold: true,
+                                margin: [8, 4, 8, 4],
+                                color: '#333',
+                              },
+                            ],
+                          ],
+                        },
+                        layout: {
+                          fillColor: () => '#fff9cc',
+                          hLineColor: () => '#f0e6a6',
+                          vLineColor: () => '#f0e6a6',
+                          hLineWidth: () => 0.5,
+                          vLineWidth: () => 0.5,
+                        },
+                      },
+                    ],
+                  ],
+                },
+                layout: {
+                  hLineWidth: () => 0,
+                  vLineWidth: () => 0,
+                },
+                margin: [0, 6, 0, 0],
+              },
+            ],
+          },
+        ],
+        margin: [0, 0, 0, 18],
+      },
 
-            .sender-address {
-              background: #f5e642 !important;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-              padding: 3px 6px;
-              font-size: 12px;
-              display: inline-block;
-              line-height: 1.55;
-            }
+      // ================= TO =================
+      {
+        columns: [
+          { width: 35, text: 'To:', bold: true, margin: [0, 4, 0, 0] },
+          {
+            width: '*',
+            stack: [
+              { text: 'Infarsight FZ LLC', bold: true, margin: [0, 0, 0, 4] },
+              {
+                text:
+                  'CWEP0325 Compass Building, Al Shohada Road,\n' +
+                  'AL Hamra Industrial Zone-FZ,\n' +
+                  'Ras Al Khaimah, 10055, Ras Al Khaimah',
+                fontSize: 10,
+                color: '#444',
+                lineHeight: 1.4,
+              },
+            ],
+          },
+        ],
+        margin: [0, 8, 0, 14],
+      },
 
-            .invoice-title {
-              font-size: 44px;
-              font-style: italic;
-              color: #a0aab4;
-              text-align: right;
-              line-height: 1;
-              margin-bottom: 10px;
-            }
+      // ================= TABLE =================
+      {
+        table: {
+          headerRows: 1,
+          widths: [50, '*', 80, 80],
+          body: [
+            [
+              {
+                text: 'Sr. No.',
+                bold: true,
+                color: '#fff',
+                fillColor: '#5f7f95',
+                margin: [6, 6, 6, 6],
+              },
+              {
+                text: 'Description',
+                bold: true,
+                color: '#fff',
+                fillColor: '#5f7f95',
+                margin: [6, 6, 6, 6],
+              },
+              {
+                text: 'Unit Price',
+                bold: true,
+                color: '#fff',
+                fillColor: '#5f7f95',
+                alignment: 'right',
+                margin: [6, 6, 6, 6],
+              },
+              {
+                text: 'Line Total',
+                bold: true,
+                color: '#fff',
+                fillColor: '#5f7f95',
+                alignment: 'right',
+                margin: [6, 6, 6, 6],
+              },
+            ],
 
-            .meta-grid {
-              display: grid;
-              grid-template-columns: auto auto;
-              gap: 3px 0;
-              justify-content: end;
-            }
+            [
+              { text: '1', alignment: 'center', margin: [0, 6, 0, 6] },
+              {
+                text: `Professional Services for the month of ${monthName}`,
+                margin: [0, 6, 0, 6],
+              },
+              { text: '', margin: [0, 6, 0, 6] },
+              { text: `$ ${amount}`, alignment: 'right', margin: [0, 6, 0, 6] },
+            ],
 
-            .meta-label {
-              font-size: 12px;
-              color: #333;
-              padding-right: 10px;
-              text-align: right;
-              display: flex;
-              align-items: center;
-            }
+            ...emptyRows,
+          ],
+        },
+        layout: {
+          hLineColor: '#c5d0d8',
+          vLineColor: '#c5d0d8',
+        },
+        margin: [0, 0, 0, 6],
+      },
 
-            .meta-value {
-              background: #f5e642 !important;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-              padding: 2px 10px;
-              font-size: 12px;
-              font-weight: 600;
-              min-width: 120px;
-            }
+      // ================= BOTTOM =================
+      {
+        columns: [
+          {
+            width: '55%',
+            stack: [
+              { text: 'Please make checks payable to', fontSize: 10 },
 
-            /* ── BILL TO ── */
-            .bill-section {
-              margin-bottom: 20px;
-            }
+              {
+                text: [
+                  { text: 'Wire transfer to credit of - ', fontSize: 10 },
+                  {
+                    text: 'Md Minhazur Rahman Rafi',
+                    color: '#c0392b',
+                    bold: true,
+                    fontSize: 10,
+                  },
+                ],
+                margin: [0, 2, 0, 6],
+              },
 
-            .bill-row {
-              display: flex;
-            }
+              {
+                text:
+                  'Bank Name- The City Bank\n' +
+                  'Bank Account No - 2933502880001\n' +
+                  'Bank Branch Name - Ambarkhana, Sylhet, Bangladesh.\n' +
+                  'Routing Code - 225910041\n' +
+                  'SWIFT Code - CIBLBDDH',
+                fontSize: 10.5,
+                lineHeight: 1.5,
+              },
+            ],
+          },
 
-            .bill-label {
-              font-weight: bold;
-              font-size: 13px;
-              min-width: 48px;
-              padding-top: 1px;
-            }
+          {
+            width: '45%',
+            table: {
+              widths: ['*', 20, 80],
+              body: [
+                [
+                  { text: 'Subtotal', alignment: 'right' },
+                  { text: '$', alignment: 'center' },
+                  { text: amount, alignment: 'right' },
+                ],
+                [
+                  { text: 'Tax', alignment: 'right' },
+                  { text: '$', alignment: 'center' },
+                  { text: '-', alignment: 'right' },
+                ],
+                [
+                  {
+                    text: 'Total',
+                    bold: true,
+                    alignment: 'right',
+                    margin: [0, 6, 0, 6],
+                  },
+                  { text: '$', bold: true, alignment: 'center' },
+                  { text: amount, bold: true, alignment: 'right' },
+                ],
+              ],
+            },
+            layout: {
+              hLineWidth: (i: number) => (i === 2 ? 1 : 0),
+              hLineColor: () => '#000',
+              vLineWidth: () => 0,
+            },
+          },
+        ],
+        margin: [0, 4, 0, 10],
+      },
 
-            .bill-name {
-              font-weight: bold;
-              font-size: 13px;
-            }
-
-            .bill-address {
-              font-size: 12px;
-              color: #444;
-              line-height: 1.65;
-              margin-top: 2px;
-            }
-
-            /* ── INVOICE TABLE ── */
-            .invoice-table {
-              width: 100%;
-              border-collapse: collapse;
-            }
-
-            .invoice-table thead tr {
-              background: #4a6f8a !important;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-              color: #fff;
-            }
-
-            .invoice-table thead th {
-              padding: 9px 10px;
-              font-size: 12px;
-              font-weight: bold;
-              text-align: left;
-            }
-
-            .invoice-table thead th:nth-child(3),
-            .invoice-table thead th:nth-child(4) {
-              text-align: right;
-            }
-
-            .invoice-table tbody tr:nth-child(odd) {
-              background: #ffffff !important;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
-
-            .invoice-table tbody tr:nth-child(even) {
-              background: #dce8f0 !important;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
-
-            .invoice-table tbody td {
-              padding: 0 10px;
-              height: 21px;
-              font-size: 12px;
-              color: #333;
-            }
-
-            .invoice-table tbody td:nth-child(3),
-            .invoice-table tbody td:nth-child(4) {
-              text-align: right;
-            }
-
-            /* ── BOTTOM ── */
-            .bottom-section {
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-start;
-              border-top: 1px solid #bbb;
-              padding-top: 12px;
-              margin-top: 0;
-            }
-
-            .payment-block {
-              max-width: 360px;
-            }
-
-            .payment-intro {
-              font-size: 12px;
-              color: #333;
-              line-height: 1.9;
-            }
-
-            .payee-name {
-              color: #1a4a8a;
-              font-weight: 700;
-            }
-
-            .bank-table {
-              border-collapse: collapse;
-              margin-top: 2px;
-            }
-
-            .bank-table td {
-              font-size: 12px;
-              color: #333;
-              padding: 1.5px 0;
-              vertical-align: top;
-              line-height: 1.7;
-            }
-
-            .bank-table td:first-child {
-              white-space: nowrap;
-              padding-right: 6px;
-            }
-
-            /* ── TOTALS ── */
-            .totals-block {
-              width: 240px;
-            }
-
-            .totals-table {
-              border-collapse: collapse;
-              width: 100%;
-              table-layout: fixed;
-            }
-
-            .totals-table td {
-              font-size: 12px;
-              padding: 3px 8px;
-              color: #333;
-            }
-
-            .totals-table td:first-child {
-              text-align: left;
-              width: 80px;
-            }
-
-            .totals-table td:nth-child(2) {
-              text-align: right;
-              width: 24px;
-            }
-
-            .totals-table td:last-child {
-              text-align: right;
-              width: 136px;
-            }
-
-            .totals-table .divider td {
-              border-top: 1.5px solid #1a1a2e;
-              padding-top: 5px;
-              font-weight: bold;
-              font-size: 13px;
-              color: #1a1a2e;
-            }
-
-            /* ── FOOTER ── */
-            .footer {
-              padding-top: 16px;
-              text-align: center;
-              font-size: 11.5px;
-              color: #5a7fa0;
-              border-top: 1px solid #ddd;
-            }
-          </style>
-        </head>
-        <body>
-
-          <!-- HEADER -->
-          <div class="header">
-            <div>
-              <div class="sender-name">Minhazur Rahman Rafi</div>
-              <div class="sender-address">183/56 Kazi Villa, 12 no Road, Bagbari, Sylhet, Bangladesh.</div>
-            </div>
-            <div>
-              <div class="invoice-title">Invoice</div>
-              <div class="meta-grid">
-                <span class="meta-label">Date:</span>
-                <span class="meta-value">${formattedDate}</span>
-                <span class="meta-label">Invoice #:</span>
-                <span class="meta-value">${invoice.invoiceNumber}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- BILL TO -->
-          <div class="bill-section">
-            <div class="bill-row">
-              <div class="bill-label">To:</div>
-              <div>
-                <div class="bill-name">Infarsight FZ LLC</div>
-                <div class="bill-address">
-                  CWEP0325 Compass Building, Al Shohada Road,<br/>
-                  AL Hamra Industrial Zone-FZ,<br/>
-                  Ras Al Khaimah, 10055, Ras Al Khaimah
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- TABLE -->
-          <table class="invoice-table">
-            <thead>
-              <tr>
-                <th style="width:62px">Sr. No.</th>
-                <th>Description</th>
-                <th style="width:110px">Unit Price</th>
-                <th style="width:110px">Line Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td></td>
-                <td>Professional Services for the month of ${monthName}</td>
-                <td></td>
-                <td>$&nbsp;&nbsp;${amount}</td>
-              </tr>
-              ${emptyRows}
-            </tbody>
-          </table>
-
-          <!-- BOTTOM -->
-          <div class="bottom-section">
-            <div class="payment-block">
-              <div class="payment-intro">Please make checks payable to</div>
-              <div class="payment-intro">
-                Wire transfer to credit of - <span class="payee-name">Md Minhazur Rahman Rafi</span>
-              </div>
-              <table class="bank-table">
-                <tr><td>Bank Name-</td><td>The City Bank</td></tr>
-                <tr><td>Bank Account No -</td><td>2933502880001</td></tr>
-                <tr><td>Bank Branch Name -</td><td>Ambarkhana, Sylhet, Bangladesh.</td></tr>
-                <tr><td>Routing Code -</td><td>225910041</td></tr>
-                <tr><td>SWIFT Code -</td><td>CIBLBDDH</td></tr>
-              </table>
-            </div>
-
-            <div class="totals-block">
-              <table class="totals-table">
-                <tr>
-                  <td>Subtotal</td>
-                  <td>$</td>
-                  <td>${amount}</td>
-                </tr>
-                <tr>
-                  <td>Tax</td>
-                  <td>$</td>
-                  <td>-</td>
-                </tr>
-                <tr class="divider">
-                  <td>Total</td>
-                  <td>$</td>
-                  <td>${amount}</td>
-                </tr>
-              </table>
-            </div>
-          </div>
-
-          <!-- spacer -->
-          <div style="flex: 1;"></div>
-
-          <!-- FOOTER -->
-          <div class="footer">
-            183/56 Kazi Villa, 12 no Road, Bagbari, Sylhet, Bangladesh.
-          </div>
-
-        </body>
-      </html>
-    `;
+      // ================= FOOTER =================
+      {
+        text: '183/56 Kazi Villa, 12 no Road, Bagbari, Sylhet, Bangladesh.',
+        alignment: 'center',
+        fontSize: 9,
+        color: '#6c8ea0',
+        margin: [0, 12, 0, 0],
+        decoration: 'underline',
+        decorationColor: '#ccc',
+      },
+    ],
+  };
 }
 
 /**
- * Generates a PDF from HTML and uploads it to Cloudinary
+ * Generates a PDF from invoice data and uploads it to Cloudinary
+ * Uses pdfmake for lightweight generation without Puppeteer/Chromium
  */
 export async function generateAndUploadPdf(
   invoice: Invoice,
   cloudinaryService: CloudinaryService,
 ): Promise<string> {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  return new Promise((resolve, reject) => {
+    try {
+      initializeFonts();
+      if (!fonts.Roboto) {
+        reject(
+          new Error(
+            'Font files not properly loaded. Check pdfmake vfs_fonts availability.',
+          ),
+        );
+        return;
+      }
+
+      const printer = new PdfPrinter(fonts);
+      const docDefinition = generateInvoicePdfDefinition(invoice);
+
+      const pdfDoc = printer.createPdfKitDocument(docDefinition);
+
+      const chunks: Buffer[] = [];
+
+      pdfDoc.on('data', (chunk: Buffer) => {
+        chunks.push(chunk);
+      });
+
+      pdfDoc.on('end', async () => {
+        try {
+          const pdfBuffer = Buffer.concat(chunks);
+          const monthName = dayjs(invoice.month).format('MMMM');
+          const fileName = `Invoice_${monthName}_${Date.now()}`;
+
+          const pdfUrl = await cloudinaryService.uploadPdfBuffer(
+            pdfBuffer,
+            fileName,
+          );
+
+          resolve(pdfUrl);
+        } catch (error) {
+          reject(
+            new Error(
+              `Failed to upload PDF: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            ),
+          );
+        }
+      });
+
+      pdfDoc.on('error', (error: Error) => {
+        reject(new Error(`Failed to generate PDF: ${error.message}`));
+      });
+
+      pdfDoc.end();
+    } catch (error) {
+      reject(
+        new Error(
+          `PDF generation error: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
+    }
   });
-
-  const page = await browser.newPage();
-
-  await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1 });
-
-  const htmlContent = generateInvoiceHtml(invoice);
-
-  await page.setContent(htmlContent, {
-    waitUntil: 'networkidle0',
-  });
-
-  const pdfBuffer = await page.pdf({
-    width: '794px',
-    height: '1123px',
-    printBackground: true,
-    margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' },
-  });
-
-  await browser.close();
-
-  const monthName = dayjs(invoice.month).format('MMMM');
-  const fileName = `Invoice_${monthName}_${Date.now()}`;
-
-  return await cloudinaryService.uploadPdfBuffer(
-    Buffer.from(pdfBuffer),
-    fileName,
-  );
 }
 
 export function transformInvoiceWithUrls(invoice: Invoice) {

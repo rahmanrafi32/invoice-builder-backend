@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { InvoicesModule } from './invoice/invoice.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
+import { getDatabaseConfig } from './config/database.factory';
 
 @Module({
   imports: [
@@ -14,16 +15,7 @@ import { CloudinaryModule } from './cloudinary/cloudinary.module';
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        url: configService.get('DATABASE_URL'),
-        ssl: { rejectUnauthorized: true },
-        entities: [__dirname + '/**/*.entities{.ts,.js}'],
-        synchronize: false,
-        logging: configService.get('NODE_ENV') === 'development',
-        migrations: [__dirname + '/migrations/*{.ts,.js}'],
-        migrationsRun: false,
-      }),
+      useFactory: getDatabaseConfig,
       inject: [ConfigService],
     }),
     InvoicesModule,

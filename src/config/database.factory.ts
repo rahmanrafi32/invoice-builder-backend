@@ -18,6 +18,7 @@ export const getDatabaseConfig = (
 
   if (isProduction) {
     return {
+      ...baseConfig,
       replication: {
         master: {
           url: configService.get('DATABASE_URL_MASTER'),

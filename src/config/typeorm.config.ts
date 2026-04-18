@@ -16,18 +16,8 @@ const baseConfig: DataSourceOptions = {
 
 const prodConfig: DataSourceOptions = {
   ...baseConfig,
-  replication: {
-    master: {
-      url: process.env.DATABASE_URL_MASTER,
-      ssl: { rejectUnauthorized: true },
-    },
-    slaves: [
-      {
-        url: process.env.DATABASE_URL_SLAVE,
-        ssl: { rejectUnauthorized: true },
-      },
-    ],
-  },
+  url: process.env.DATABASE_URL_MASTER,
+  ssl: { rejectUnauthorized: true },
 };
 
 const localConfig: DataSourceOptions = {

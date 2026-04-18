@@ -16,18 +16,42 @@ const baseConfig: DataSourceOptions = {
 
 const prodConfig: DataSourceOptions = {
   ...baseConfig,
-  url: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: true },
+  replication: {
+    master: {
+      url: process.env.DATABASE_URL_MASTER,
+      ssl: { rejectUnauthorized: true },
+    },
+    slaves: [
+      {
+        url: process.env.DATABASE_URL_SLAVE,
+        ssl: { rejectUnauthorized: true },
+      },
+    ],
+  },
 };
 
 const localConfig: DataSourceOptions = {
   ...baseConfig,
-  host: process.env.DB_HOST,
-  port: parseInt(process.env.DB_PORT || '5432', 10),
-  username: process.env.DB_USERNAME,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  ssl: false,
+  replication: {
+    master: {
+      host: process.env.DB_HOST,
+      port: parseInt(process.env.DB_PORT || '5432', 10),
+      username: process.env.DB_USERNAME,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+      ssl: false,
+    },
+    slaves: [
+      {
+        host: process.env.DB_HOST,
+        port: parseInt(process.env.DB_SLAVE_PORT || '5433', 10),
+        username: process.env.DB_USERNAME,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME,
+        ssl: false,
+      },
+    ],
+  },
 };
 
 export default new DataSource(isProduction ? prodConfig : localConfig);

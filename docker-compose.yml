@@ -11,6 +11,31 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./master.conf:/etc/postgresql/postgresql.conf
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    networks:
+      - pg_net
+
+  postgres_slave:
+    image: postgres:16
+    container_name: invoice_postgres_slave
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: invoice@pass
+      POSTGRES_DB: invoice_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_slave_data:/var/lib/postgresql/data
+    networks:
+      - pg_net
+    depends_on:
+      - postgres
 
 volumes:
   postgres_data:
+  postgres_slave_data:
+
+networks:
+  pg_net:

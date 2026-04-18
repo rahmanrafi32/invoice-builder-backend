@@ -18,19 +18,42 @@ export const getDatabaseConfig = (
 
   if (isProduction) {
     return {
-      ...baseConfig,
-      url: configService.get('DATABASE_URL'),
-      ssl: { rejectUnauthorized: true },
+      replication: {
+        master: {
+          url: configService.get('DATABASE_URL_MASTER'),
+          ssl: { rejectUnauthorized: true },
+        },
+        slaves: [
+          {
+            url: configService.get('DATABASE_URL_SLAVE'),
+            ssl: { rejectUnauthorized: true },
+          },
+        ],
+      },
     } as TypeOrmModuleOptions;
   }
 
   return {
     ...baseConfig,
-    host: configService.get('DB_HOST'),
-    port: parseInt(<string>configService.get('DB_PORT'), 10),
-    username: configService.get('DB_USERNAME'),
-    password: configService.get('DB_PASSWORD'),
-    database: configService.get('DB_NAME'),
-    ssl: false,
+    replication: {
+      master: {
+        host: configService.get('DB_HOST'),
+        port: parseInt(<string>configService.get('DB_PORT'), 10),
+        username: configService.get('DB_USERNAME'),
+        password: configService.get('DB_PASSWORD'),
+        database: configService.get('DB_NAME'),
+        ssl: false,
+      },
+      slaves: [
+        {
+          host: configService.get('DB_HOST'),
+          port: parseInt(<string>configService.get('DB_SLAVE_PORT'), 10),
+          username: configService.get('DB_USERNAME'),
+          password: configService.get('DB_PASSWORD'),
+          database: configService.get('DB_NAME'),
+          ssl: false,
+        },
+      ],
+    },
   } as TypeOrmModuleOptions;
 };

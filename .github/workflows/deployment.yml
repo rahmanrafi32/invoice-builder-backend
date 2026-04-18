@@ -31,7 +31,7 @@ jobs:
       - name: Run Migrations
         run: npx typeorm-ts-node-commonjs migration:run -d src/config/typeorm.config.ts
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL_MASTER }}
           NODE_ENV: production
 
       - name: Login to Azure

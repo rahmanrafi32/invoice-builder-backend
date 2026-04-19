@@ -8,7 +8,10 @@ const isProduction = nodeEnv === 'production';
 
 const baseConfig: DataSourceOptions = {
   type: 'postgres',
-  entities: [__dirname + '/../**/*.entities{.ts,.js}'],
+  entities: [
+    __dirname + '/../**/*.entity{.ts,.js}',
+    __dirname + '/../**/*.entities{.ts,.js}',
+  ],
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
   synchronize: false,
   logging: !isProduction,

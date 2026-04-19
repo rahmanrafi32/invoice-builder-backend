@@ -5,6 +5,8 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { InvoicesModule } from './invoice/invoice.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
+import { AuthModule } from './auth/auth.module';
+import { ClientModule } from './client/client.module';
 import { getDatabaseConfig } from './config/database.factory';
 
 @Module({
@@ -18,6 +20,8 @@ import { getDatabaseConfig } from './config/database.factory';
       useFactory: getDatabaseConfig,
       inject: [ConfigService],
     }),
+    AuthModule,
+    ClientModule,
     InvoicesModule,
     CloudinaryModule,
   ],

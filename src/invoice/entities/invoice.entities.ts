@@ -4,7 +4,11 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { User } from '../../auth/entities/user.entity';
+import { Client } from '../../client/entities/client.entity';
 
 @Entity('invoice')
 export class Invoice {
@@ -13,6 +17,14 @@ export class Invoice {
 
   @Column({ unique: true })
   invoiceNumber: number;
+
+  @ManyToOne(() => User, (user) => user.invoices)
+  @JoinColumn()
+  user: User;
+
+  @ManyToOne(() => Client, (client) => client.invoices)
+  @JoinColumn()
+  client: Client;
 
   @Column()
   month: string;
@@ -29,8 +41,11 @@ export class Invoice {
   @Column({ default: 'USD' })
   currency: string;
 
-  @Column()
-  clientName: string;
+  @Column({ nullable: true })
+  taxPercentage: number;
+
+  @Column({ nullable: true })
+  notes: string;
 
   @Column({ nullable: true })
   pdfPath: string;

@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import { Invoice } from '../entities/invoice.entities';
 import { CloudinaryService } from '../../cloudinary/cloudinary.service';
+import { User } from '../../auth/entities/user.entity';
 import { v2 as cloudinary } from 'cloudinary';
 import PdfPrinter from 'pdfmake/src/printer';
 
@@ -92,7 +93,7 @@ function initializeFonts() {
 /**
  * Generates invoice PDF document definition for pdfmake
  */
-export function generateInvoicePdfDefinition(invoice: Invoice) {
+export function generateInvoicePdfDefinition(invoice: Invoice, user: User) {
   const formattedDate = dayjs(invoice.issueDate).format('DD/MM/YYYY');
   const monthName = dayjs(invoice.month).format('MMMM YYYY');
   const amount = Number(invoice.amount).toFixed(2);
@@ -133,12 +134,12 @@ export function generateInvoicePdfDefinition(invoice: Invoice) {
           // ROW 2 → Sender + Date/Invoice
           {
             columns: [
-              // LEFT (Sender)
+              // LEFT (Sender - from user)
               {
                 width: '*',
                 stack: [
                   {
-                    text: 'Minhazur Rahman Rafi',
+                    text: user.senderName,
                     fontSize: 16,
                     bold: true,
                     margin: [0, 8, 0, 4],
@@ -149,7 +150,7 @@ export function generateInvoicePdfDefinition(invoice: Invoice) {
                       body: [
                         [
                           {
-                            text: '183/56 Kazi Villa, 12 no Road, Bagbari, Sylhet, Bangladesh.',
+                            text: user.senderAddress,
                             margin: [8, 5, 8, 5],
                             fontSize: 10,
                             bold: true,
@@ -216,7 +217,7 @@ export function generateInvoicePdfDefinition(invoice: Invoice) {
                           body: [
                             [
                               {
-                                text: invoice.invoiceNumber.toString(),
+                                text: `${user.invoicePrefix}-${invoice.invoiceNumber}`,
                                 bold: true,
                                 margin: [8, 4, 8, 4],
                                 color: '#333',
@@ -254,12 +255,13 @@ export function generateInvoicePdfDefinition(invoice: Invoice) {
           {
             width: '*',
             stack: [
-              { text: 'Infarsight FZ LLC', bold: true, margin: [0, 0, 0, 4] },
+              { text: invoice.client.name, bold: true, margin: [0, 0, 0, 4] },
               {
-                text:
-                  'CWEP0325 Compass Building, Al Shohada Road,\n' +
-                  'AL Hamra Industrial Zone-FZ,\n' +
-                  'Ras Al Khaimah, 10055, Ras Al Khaimah',
+                text: `${invoice.client.address}${
+                  invoice.client.city ? ', ' + invoice.client.city : ''
+                }${
+                  invoice.client.country ? ', ' + invoice.client.country : ''
+                }`,
                 fontSize: 10,
                 color: '#444',
                 lineHeight: 1.4,
@@ -341,7 +343,7 @@ export function generateInvoicePdfDefinition(invoice: Invoice) {
                 text: [
                   { text: 'Wire transfer to credit of - ', fontSize: 10 },
                   {
-                    text: 'Md Minhazur Rahman Rafi',
+                    text: user.accountHolderName,
                     color: '#c0392b',
                     bold: true,
                     fontSize: 10,
@@ -352,11 +354,11 @@ export function generateInvoicePdfDefinition(invoice: Invoice) {
 
               {
                 text:
-                  'Bank Name- The City Bank\n' +
-                  'Bank Account No - 2933502880001\n' +
-                  'Bank Branch Name - Ambarkhana, Sylhet, Bangladesh.\n' +
-                  'Routing Code - 225910041\n' +
-                  'SWIFT Code - CIBLBDDH',
+                  `Bank Name- ${user.bankName}\n` +
+                  `Bank Account No - ${user.accountNumber}\n` +
+                  `Bank Branch Name - ${user.branchName}\n` +
+                  `Routing Code - ${user.routingCode}\n` +
+                  `SWIFT Code - ${user.swiftCode}`,
                 fontSize: 10.5,
                 lineHeight: 1.5,
               },
@@ -402,7 +404,7 @@ export function generateInvoicePdfDefinition(invoice: Invoice) {
 
       // ================= FOOTER =================
       {
-        text: '183/56 Kazi Villa, 12 no Road, Bagbari, Sylhet, Bangladesh.',
+        text: user.senderAddress,
         alignment: 'center',
         fontSize: 9,
         color: '#6c8ea0',
@@ -420,6 +422,7 @@ export function generateInvoicePdfDefinition(invoice: Invoice) {
  */
 export async function generateAndUploadPdf(
   invoice: Invoice,
+  user: User,
   cloudinaryService: CloudinaryService,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -435,7 +438,7 @@ export async function generateAndUploadPdf(
       }
 
       const printer = new PdfPrinter(fonts);
-      const docDefinition = generateInvoicePdfDefinition(invoice);
+      const docDefinition = generateInvoicePdfDefinition(invoice, user);
 
       const pdfDoc = printer.createPdfKitDocument(docDefinition);
 

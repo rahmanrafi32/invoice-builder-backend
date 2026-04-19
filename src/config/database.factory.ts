@@ -9,7 +9,10 @@ export const getDatabaseConfig = (
 
   const baseConfig = {
     type: 'postgres' as const,
-    entities: [__dirname + '/../**/*.entities{.ts,.js}'],
+    entities: [
+      __dirname + '/../**/*.entity{.ts,.js}',
+      __dirname + '/../**/*.entities{.ts,.js}',
+    ],
     synchronize: false,
     logging: nodeEnv === 'development',
     migrations: [__dirname + '/../migrations/*{.ts,.js}'],

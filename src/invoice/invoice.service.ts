@@ -2,7 +2,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Invoice } from './entities/invoice.entities';
@@ -24,6 +27,7 @@ export class InvoiceService {
     private invoiceRepository: Repository<Invoice>,
     private cloudinaryService: CloudinaryService,
     private clientService: ClientService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async create(dto: CreateInvoiceDto, user: User) {
@@ -77,6 +81,9 @@ export class InvoiceService {
       );
     }
 
+    // Invalidate invoices list cache
+    await this.cacheManager.del(`invoices_list_${user.id}`);
+
     return this.findOne(invoice.id, user.id);
   }
 
@@ -87,6 +94,13 @@ export class InvoiceService {
     search?: string,
     month?: string,
   ) {
+    const cacheKey = `invoices_list_${user.id}_page_${page}_limit_${limit}_search_${search || 'all'}_month_${month || 'all'}`;
+    const cachedResult = await this.cacheManager.get<object>(cacheKey);
+
+    if (cachedResult) {
+      return cachedResult;
+    }
+
     const query = this.invoiceRepository
       .createQueryBuilder('invoice')
       .leftJoinAndSelect('invoice.client', 'client')
@@ -113,15 +127,26 @@ export class InvoiceService {
       transformInvoiceWithUrls(invoice),
     );
 
-    return {
+    const result = {
       data: transformedData,
       total,
       page,
       limit,
     };
+
+    await this.cacheManager.set(cacheKey, result);
+
+    return result;
   }
 
   async findOne(id: string, userId: string) {
+    const cacheKey = `invoice_${id}_user_${userId}`;
+    const cachedInvoice = await this.cacheManager.get<object>(cacheKey);
+
+    if (cachedInvoice) {
+      return cachedInvoice;
+    }
+
     const invoice = await this.invoiceRepository.findOne({
       where: { id, user: { id: userId } },
       relations: ['user', 'client'],
@@ -131,15 +156,23 @@ export class InvoiceService {
       throw new NotFoundException(`Invoice with ID ${id} not found`);
     }
 
-    return transformInvoiceWithUrls(invoice);
+    const transformedInvoice = transformInvoiceWithUrls(invoice);
+    await this.cacheManager.set(cacheKey, transformedInvoice);
+
+    return transformedInvoice;
   }
 
   async remove(id: string, userId: string) {
     const invoice = await this.findOne(id, userId);
 
-    if (invoice.pdfPath) {
+    // Get the raw invoice entity for property access
+    const rawInvoice = await this.invoiceRepository.findOne({
+      where: { id, user: { id: userId } },
+    });
+
+    if (rawInvoice?.pdfPath) {
       try {
-        const publicId = extractPublicIdFromUrl(invoice.pdfPath);
+        const publicId = extractPublicIdFromUrl(rawInvoice.pdfPath);
         if (publicId) {
           await this.cloudinaryService.deleteFile(publicId);
         }
@@ -148,10 +181,19 @@ export class InvoiceService {
       }
     }
 
-    await this.invoiceRepository.remove(invoice);
+    if (rawInvoice) {
+      await this.invoiceRepository.remove(rawInvoice);
+    }
+
+    // Invalidate caches
+    await this.cacheManager.del(`invoice_${id}_user_${userId}`);
+    await this.cacheManager.del(`invoices_list_${userId}`);
+
+    // Get invoice number from the cached/transformed invoice for the response
+    const invoiceData = invoice as unknown as { invoiceNumber: number };
 
     return {
-      message: `Invoice #${invoice.invoiceNumber} deleted successfully`,
+      message: `Invoice #${invoiceData.invoiceNumber} deleted successfully`,
     };
   }
 }

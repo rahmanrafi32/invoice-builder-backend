@@ -2,7 +2,10 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -19,6 +22,7 @@ export class AuthService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private jwtService: JwtService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -132,7 +136,10 @@ export class AuthService {
 
       // Generate new tokens
       return this.generateTokens(user);
-    } catch (error) {
+    } catch (err) {
+      if (err instanceof UnauthorizedException) {
+        throw err;
+      }
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
@@ -150,9 +157,19 @@ export class AuthService {
   }
 
   async validateUser(userId: string) {
-    return this.userRepository.findOne({
-      where: { id: userId, isActive: true },
-    });
+    const cacheKey = `user_${userId}`;
+    let user = await this.cacheManager.get<User>(cacheKey);
+
+    if (!user) {
+      user =
+        (await this.userRepository.findOne({
+          where: { id: userId, isActive: true },
+        })) || undefined;
+      if (user) {
+        await this.cacheManager.set(cacheKey, user);
+      }
+    }
+    return user;
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
@@ -182,6 +199,9 @@ export class AuthService {
     // Update all allowed fields
     Object.assign(user, dto);
     await this.userRepository.save(user);
+
+    // Invalidate user cache
+    await this.cacheManager.del(`user_${userId}`);
 
     return this.sanitizeUser(user);
   }
@@ -226,7 +246,9 @@ export class AuthService {
   }
 
   private sanitizeUser(user: User) {
-    const { password, refreshToken, ...rest } = user;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _password, refreshToken: _refreshToken, ...rest } =
+      user;
     return rest;
   }
 }

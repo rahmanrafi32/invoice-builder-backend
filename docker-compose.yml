@@ -11,31 +11,54 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./master.conf:/etc/postgresql/postgresql.conf
-    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+      - ./postgres/master/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./postgres/master/pg_hba.conf:/etc/postgresql/pg_hba.conf
+      - ./postgres/master/init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh
+    command: >
+      postgres
+      -c config_file=/etc/postgresql/postgresql.conf
+      -c hba_file=/etc/postgresql/pg_hba.conf
     networks:
-      - pg_net
+      - invoice-network
 
   postgres_slave:
+    depends_on:
+      - postgres
     image: postgres:16
     container_name: invoice_postgres_slave
     restart: always
+    user: postgres
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: invoice@pass
-      POSTGRES_DB: invoice_db
+      REPLICATION_USER: replicator
+      REPLICATION_PASSWORD: replica_pass
     ports:
       - "5433:5432"
     volumes:
       - postgres_slave_data:/var/lib/postgresql/data
+      - ./postgres/replica/replica.sh:/replica.sh
+    command: [ "bash", "/replica.sh" ]
     networks:
-      - pg_net
-    depends_on:
-      - postgres
+      - invoice-network
+
+  redis:
+    image: redis:7
+    container_name: invoice-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - invoice-network
 
 volumes:
   postgres_data:
   postgres_slave_data:
+  redis-data:
 
 networks:
-  pg_net:
+  invoice-network:
+    driver: bridge

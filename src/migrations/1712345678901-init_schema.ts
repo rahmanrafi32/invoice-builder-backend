@@ -69,20 +69,25 @@ export class InitSchema1712345678901 implements MigrationInterface {
         ON DELETE CASCADE
     `);
 
-    await queryRunner.query(
-      `ALTER TABLE "invoice" ADD COLUMN "userId"        uuid`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "invoice" ADD COLUMN "clientId"      uuid`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "invoice" ADD COLUMN "taxPercentage" numeric(5, 2)`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "invoice" ADD COLUMN "notes"         text`,
-    );
-
-    await queryRunner.query(`ALTER TABLE "invoice" DROP COLUMN "clientName"`);
+    await queryRunner.query(`
+      CREATE TABLE "invoice" (
+        "id"              uuid              NOT NULL DEFAULT uuid_generate_v4(),
+        "invoiceNumber"   integer           NOT NULL UNIQUE,
+        "userId"          uuid              NOT NULL,
+        "clientId"        uuid              NOT NULL,
+        "month"           character varying NOT NULL,
+        "issueDate"       date              NOT NULL,
+        "dueDate"         date              NOT NULL,
+        "amount"          numeric(10, 2)    NOT NULL,
+        "currency"        character varying NOT NULL DEFAULT 'USD',
+        "taxPercentage"   numeric(5, 2),
+        "notes"           text,
+        "pdfPath"         character varying,
+        "createdAt"       TIMESTAMP         NOT NULL DEFAULT now(),
+        "updatedAt"       TIMESTAMP         NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_invoice_id" PRIMARY KEY ("id")
+      )
+    `);
 
     await queryRunner.query(
       `CREATE INDEX "IDX_invoice_userId"   ON "invoice" ("userId")`,
@@ -117,16 +122,7 @@ export class InitSchema1712345678901 implements MigrationInterface {
     );
     await queryRunner.query(`DROP INDEX "IDX_invoice_clientId"`);
     await queryRunner.query(`DROP INDEX "IDX_invoice_userId"`);
-
-    await queryRunner.query(
-      `ALTER TABLE "invoice" ADD COLUMN "clientName" character varying`,
-    );
-    await queryRunner.query(`ALTER TABLE "invoice" DROP COLUMN "notes"`);
-    await queryRunner.query(
-      `ALTER TABLE "invoice" DROP COLUMN "taxPercentage"`,
-    );
-    await queryRunner.query(`ALTER TABLE "invoice" DROP COLUMN "clientId"`);
-    await queryRunner.query(`ALTER TABLE "invoice" DROP COLUMN "userId"`);
+    await queryRunner.query(`DROP TABLE "invoice"`);
 
     await queryRunner.query(
       `ALTER TABLE "client" DROP CONSTRAINT "FK_client_userId"`,
